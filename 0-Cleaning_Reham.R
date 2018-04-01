@@ -81,10 +81,13 @@ if (!all(seed_clean_df$spp %in% tnrs_df$matchedname)) {
   seed_clean_df$spp <- tnrs_df$matchedname
 }
 
+# Adjust string format to match trait dataset with phylogeny
+seed_clean_df$spp <- gsub(" ", "_", seed_clean_df$spp)
 
 # Save data ---------------------------------------------------------------------------------------------------------------
 saveRDS(seed_clean_df, here("R Objects", "seed_clean"))
 
 # Done! Move to 1-Phylo-Construct_Reham.R
+
 
 
