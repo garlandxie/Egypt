@@ -52,22 +52,26 @@ seed_clean <- seed_raw %>%
                          TRUE ~ spp)) 
 
 # look for accepted taxonomic names using Taxonomic Name Resolution Database
-tnrs_df <- tnrs(query = seed_clean$spp)
+tnrs_df <- tnrs(query = pull(seed_clean, spp))
 
 ## replace submitted names with accepted names 
-# first, create a logical vector that finds rows with any characters as TRUE; otherwise FALSE
-contains_accepted_names <- str_detect(tnrs_df$acceptedname, pattern = START %R% wrd(1) %R% " " %R% wrd(1))
+# first, grab accepted names and submitted names 
+tnrs_accepted <- pull(tnrs_df, acceptedname)
+tnrs_submitted <- pull(tnrs_df, submittedname)
+
+# them, create a logical vector that finds rows with any characters as TRUE; otherwise FALSE
+contains_accepted_names <- str_detect(tnrs_accepted, pattern = wrd(1) %R% " " %R% wrd(1))
 
 # then use ifelse statement: for rows that are TRUE, replace with the accepted names
 # for rows that are FALSE, replace it with the submitted name 
 # code works well except for 
 seed_clean %<>% mutate(spp = ifelse(contains_accepted_names,
-                                    tnrs_df$acceptedname, 
-                                    tnrs_df$submittedname)) 
+                                    tnrs_accepted, 
+                                    tnrs_submitted)) 
 
 ## removing subgenera
 # split strings first (as a list), 
-split_taxon <- str_split(seed_clean$spp, pattern = " ")
+split_taxon <- str_split(pull(seed_clean, spp), pattern = " ")
 
 # then just grab the genus and species as the first two string characters
 # use map_chr as a type-stable function for consistent output
@@ -77,6 +81,4 @@ seed_clean %<>% mutate(spp = map_chr(split_taxon, function(x) paste(x[1], x[2], 
 saveRDS(seed_clean, here("data/working", "seed_clean.rds"))
 
 # Done! Move to 1-Phylo-Construct_Reham.R
-
-
 
