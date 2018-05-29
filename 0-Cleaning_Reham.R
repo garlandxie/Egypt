@@ -19,11 +19,13 @@ packages("taxize", "here", "tidyverse", "readxl", "rebus", "magrittr")
 # taxize: accessing TNRS database to update taxon names
 # tidyverse: for making clean data
 # readxl: importing excel documents
+# rebus: human-readable custom pattern matching 
+# magrittr: compound assignment operator 
 libraries("here", "taxize", "tidyverse", "readxl", "rebus", "magrittr")
 
 # Import data files -----------------------------------------------------------
 
-# seed traits for each sampled species (shoud be 160 spp)
+# seed traits for each sampled species 
 seed_raw <- read_xlsx(here("data/raw", "habitat_traits.xlsx"), sheet = "Habitats&traits")
 
 # Cleaning -----------------------------------------------------------------------------------------
@@ -69,13 +71,8 @@ seed_clean %<>% mutate(spp = ifelse(contains_accepted_names,
                                     tnrs_accepted, 
                                     tnrs_submitted)) 
 
-## removing subgenera
-# split strings first (as a list), 
-split_taxon <- str_split(pull(seed_clean, spp), pattern = " ")
-
 # then just grab the genus and species as the first two string characters
-# use map_chr as a type-stable function for consistent output
-seed_clean %<>% mutate(spp = map_chr(split_taxon, function(x) paste(x[1], x[2], sep = "_")))
+seed_clean %<>% mutate(spp = word(spp, start = 1, end = 2, sep = fixed(" ")))
 
 # Save data ---------------------------------------------------------------------------------------------------------------
 saveRDS(seed_clean, here("data/working", "seed_clean.rds"))
