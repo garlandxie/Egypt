@@ -1,9 +1,9 @@
-############### Cleaning - Egyptian Seed Traits ######################
+############### Cleaning - Egyptian Seed Traits ####################################
 # This code is used to analyze phylogenetic tests for seed traits in Egyptian plants
 # Code developed by Garland Xie
-###############################################################################
+####################################################################################
 
-# Install packages (if you don't have them!) ----------------------------------------------
+# Install packages (if you don't have them!) ----------------------------------
 
 # Load up the easypackages 
 if(!require(easypackages)){
@@ -12,80 +12,69 @@ if(!require(easypackages)){
 }
 
 # check to see if you have these packages. If not, install them
-packages("taxize", "here", "tidyverse")
+packages("taxize", "here", "tidyverse", "readxl", "rebus", "magrittr")
 
 # load libraries
 # here: constructing relative file paths
-# taxize: accessing TNRS database
-# stringr: for counting words in a string
-# taxonlookup: accessing genus and family names 
-libraries("here", "taxize", "tidyverse")
+# taxize: accessing TNRS database to update taxon names
+# tidyverse: for making clean data
+# readxl: importing excel documents
+libraries("here", "taxize", "tidyverse", "readxl", "rebus", "magrittr")
 
-# Import data files --------------------------------------------------------------------------------
-# folder name: Egypyt_Seed_Conservation"
-# use relative file paths
+# Import data files -----------------------------------------------------------
 
-# here() starts at C:/Users/garla/Google Drive/Research/Research Projects/Egypyt_Seed_Conservation
-here()
-
-# seed traits for each sampled species
-seed_raw_df <- read_csv(here("Raw Datasets/Species", "Reham_seed_data.csv"))
+# seed traits for each sampled species (shoud be 160 spp)
+seed_raw <- read_xlsx(here("data/raw", "habitat_traits.xlsx"), sheet = "Habitats&traits")
 
 # Cleaning -----------------------------------------------------------------------------------------
 
-# keep raw data, but create new object for clean dataset
-seed_clean_df <- seed_raw_df
-
-# Update column names to make them shorter
-colnames(seed_clean_df) <- c("spp", 'mass', "len", "width", "thick", "germ", "rain", "size")
-
-# Remove empty values from seed_clean_df$Species
-seed_clean_df <- seed_clean_df[seed_clean_df$spp != "", ]
-
-# Remove commas from seed_clean_df$spp
-seed_clean_df$spp <- gsub(",", "", seed_clean_df$spp) 
-
-# Re-update synonyms (or typo mistakes)
-seed_clean_df$spp[seed_clean_df$spp == "Psuedogynaphallium lutea-album"] <- "Helichrysum luteoalbum"
-seed_clean_df$spp[seed_clean_df$spp == "Veronica-anagalis aquatica"] <- "Veronica anagallis-aquatica" 
-seed_clean_df$spp[seed_clean_df$spp == "Eclypta alba"] <- "Eclipta alba"
-seed_clean_df$spp[seed_clean_df$spp == "Ipomea carnea"] <- "Ipomoea carnea"
-seed_clean_df$spp[seed_clean_df$spp == "Nympheae lotus"] <- "Nymphaea lotus"
-seed_clean_df$spp[seed_clean_df$spp == "Nympheae nouchali"] <- "Nymphaea nouchali"
-seed_clean_df$spp[seed_clean_df$spp == "Rorippa Palustris"] <- "Rorippa palustris"
-
-# update taxonomic names for seed_clean_df for phylo signal tests 
-seed_clean_df <- seed_clean_df[!(seed_clean_df$spp == "Amaranthus hyperidus v. hyperidus"), ]
-
-# look for accepted taxonomic names from multiple databases
-tnrs_df <- tnrs(query = seed_clean_df$spp)
-
-# find number of words per string in matched names
-wc <- sapply(tnrs_df$matchedname, function(x) str_count(x, '\\w+'))
-
-# replace genus-only characters with species-level submitted names
-tnrs_df$matchedname[wc == 1] <- tnrs_df$submittedname[wc == 1]
-
-# remove any missing values
-seed_clean_df <- seed_clean_df[complete.cases(seed_clean_df), ]
-
-# check to see if taxon names are consistent in each dataset; if not, update seed_clean_df
-# double-check this function later on; it seems  like re-update taxa should be outside of bracket.. 
-if (!all(seed_clean_df$spp %in% tnrs_df$matchedname)) {
+seed_clean <- seed_raw %>% 
   
-  # re-organize dataframes based on a condition
-  seed_clean_df <- seed_clean_df[order(seed_clean_df$spp), ]
-  tnrs_df <- tnrs_df[order(tnrs_df$matchedname), ]
+  # rename columns for conciseness
+  rename(spp = "Species",
+         habitat = "Habitat",
+         seed_mass = "seed mass(gm/100seed)", 
+         seed_length = "seed length(mm", 
+         seed_width = "seed width(mm)",
+         seed_thick = "seed thickness(mm)", 
+         seed_germ = "seed germination", 
+         seed_rain = "Seed rain",
+         seed_size = "Seed size") %>%
   
-  # re-update taxa
-  seed_clean_df$spp <- tnrs_df$matchedname
-}
+  # fix up typo mistakes (and possible taxonomic synonyms)
+  # use case_when for multiple ifelse statements
+  mutate(spp = case_when(spp == "Pseudognaphalium luteo-album" ~ "Helichrysum luteoalbum",
+                         spp == "Veronica-anagalis aquatica" ~ "Veronica anagallis-aquatica",
+                         spp == "Eclypta alba" ~ "Eclipta alba", 
+                         spp == "Ipomea carnea" ~ "Ipomoea carnea",
+                         spp == "Nympheae lotus" ~ "Nymphaea lotus", 
+                         spp == "Rorippa Palustris" ~ "Rorippa palustris",
+                         TRUE ~ spp)) 
 
-# Adjust string format to match trait dataset with phylogeny
-seed_clean_df$spp <- gsub(" ", "_", seed_clean_df$spp)
+# look for accepted taxonomic names using Taxonomic Name Resolution Database
+tnrs_df <- tnrs(query = seed_clean$spp)
+
+## replace submitted names with accepted names 
+# first, create a logical vector that finds rows with any characters as TRUE; otherwise FALSE
+contains_accepted_names <- str_detect(tnrs_df$acceptedname, pattern = START %R% wrd(1) %R% " " %R% wrd(1))
+
+# then use ifelse statement: for rows that are TRUE, replace with the accepted names
+# for rows that are FALSE, replace it with the submitted name 
+# code works well except for 
+seed_clean %<>% mutate(spp = ifelse(contains_accepted_names,
+                                    tnrs_df$acceptedname, 
+                                    tnrs_df$submittedname)) 
+
+## removing subgenera
+# split strings first (as a list), 
+split_taxon <- str_split(seed_clean$spp, pattern = " ")
+
+# then just grab the genus and species as the first two string characters
+# use map_chr as a type-stable function for consistent output
+seed_clean %<>% mutate(spp = map_chr(split_taxon, function(x) paste(x[1], x[2], sep = "_")))
 
 # Save data ---------------------------------------------------------------------------------------------------------------
-saveRDS(seed_clean_df, here("R Objects", "seed_clean"))
+saveRDS(seed_clean, here("data/working", "seed_clean.rds"))
 
 # Done! Move to 1-Phylo-Construct_Reham.R
 
